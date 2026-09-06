@@ -1,6 +1,10 @@
-# portfolio-xray
+# Stock Tracker - Portfolio Diversification & Investment Exposure Analytics
 
-portfolio-xray is a fintech portfolio-analysis tool for ETF and stock look-through analysis. It reveals a user’s true consolidated sector and geographic exposure across a full portfolio by resolving each ETF into its underlying holdings rather than treating it as a single opaque position.
+A full-stack application for analyzing investment portfolios, calculating exposure to companies, sectors, and regions, and performing ETF look-through analysis.
+
+## 🚀 Project Status
+
+**Initial Setup Complete** - Core architecture and project structure established.
 
 ## MVP Architecture
 
