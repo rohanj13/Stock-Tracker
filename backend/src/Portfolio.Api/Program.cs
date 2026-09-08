@@ -58,14 +58,14 @@ app.UseApiMiddleware();
 app.MapHealthChecks("/healthz");
 app.MapHealthEndpoints();
 
-// Map API endpoints (portfolio-specific endpoints will be added here)
+// Map API endpoints
 var apiGroup = app.MapGroup("/api")
     .WithOpenApi();
 
-// Placeholder for portfolio endpoints
-// Future endpoints like:
-// apiGroup.MapPortfolioEndpoints();
-// apiGroup.MapPortfolioHoldingsEndpoints();
-// etc.
+apiGroup.MapUserEndpoints();
+apiGroup.MapPortfolioEndpoints();
+apiGroup.MapStockEndpoints();
+apiGroup.MapEtfEndpoints();
+apiGroup.MapExposureEndpoints();
 
 app.Run();
