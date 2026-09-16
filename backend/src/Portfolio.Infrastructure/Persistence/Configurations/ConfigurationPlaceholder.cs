@@ -10,7 +10,9 @@ public sealed class SecurityConfiguration : IEntityTypeConfiguration<Security>
 {
     public void Configure(EntityTypeBuilder<Security> builder)
     {
-        builder.ToTable("Securities");
+        builder.ToTable(
+            "Securities",
+            tableBuilder => tableBuilder.HasCheckConstraint("CK_Securities_CountryCode_Length", "char_length(\"CountryCode\") = 2"));
 
         builder.HasKey(security => security.Id);
 
@@ -40,7 +42,6 @@ public sealed class SecurityConfiguration : IEntityTypeConfiguration<Security>
             .HasValue<Bond>(SecurityType.Bond)
             .HasValue<Cash>(SecurityType.Cash);
 
-        builder.HasCheckConstraint("CK_Securities_CountryCode_Length", "char_length(\"CountryCode\") = 2");
     }
 }
 
@@ -48,6 +49,10 @@ public sealed class StockConfiguration : IEntityTypeConfiguration<Stock>
 {
     public void Configure(EntityTypeBuilder<Stock> builder)
     {
+        builder.ToTable(
+            "Securities",
+            tableBuilder => tableBuilder.HasCheckConstraint("CK_Securities_GicsIndustryCode_Length", "char_length(\"GicsIndustryCode\") = 8"));
+
         builder.Property(stock => stock.Sector)
             .HasConversion<string>()
             .HasMaxLength(64)
@@ -60,6 +65,5 @@ public sealed class StockConfiguration : IEntityTypeConfiguration<Stock>
             .IsFixedLength()
             .IsRequired();
 
-        builder.HasCheckConstraint("CK_Securities_GicsIndustryCode_Length", "char_length(\"GicsIndustryCode\") = 8");
     }
 }
