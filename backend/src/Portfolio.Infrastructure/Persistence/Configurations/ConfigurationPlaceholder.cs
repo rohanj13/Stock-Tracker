@@ -1,22 +1,65 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Portfolio.Domain.Entities;
+using Portfolio.Domain.Enums;
+using Portfolio.Domain.ValueObjects;
+
 namespace Portfolio.Infrastructure.Persistence.Configurations;
 
-/// <summary>
-/// Placeholder for Entity Framework Core configurations.
-/// Each entity configuration should be in its own class implementing IEntityTypeConfiguration{T}.
-/// 
-/// Example configuration pattern:
-/// public class PortfolioConfiguration : IEntityTypeConfiguration<Portfolio>
-/// {
-///     public void Configure(EntityTypeBuilder<Portfolio> builder)
-///     {
-///         builder.HasKey(p => p.Id);
-///         builder.Property(p => p.Name).IsRequired().HasMaxLength(256);
-///         // ... additional configuration
-///     }
-/// }
-/// 
-/// Configurations are registered in ApplicationDbContext.OnModelCreating() method.
-/// </summary>
-public static class ConfigurationPlaceholder
+public sealed class SecurityConfiguration : IEntityTypeConfiguration<Security>
 {
+    public void Configure(EntityTypeBuilder<Security> builder)
+    {
+        builder.ToTable("Securities");
+
+        builder.HasKey(security => security.Id);
+
+        builder.Property(security => security.Symbol)
+            .HasMaxLength(16)
+            .IsRequired();
+
+        builder.Property(security => security.Name)
+            .HasMaxLength(256)
+            .IsRequired();
+
+        builder.Property(security => security.Country)
+            .HasConversion(country => country.Value, value => new CountryCode(value))
+            .HasColumnName("CountryCode")
+            .HasMaxLength(2)
+            .IsFixedLength()
+            .IsRequired();
+
+        builder.Property(security => security.Type)
+            .HasConversion<string>()
+            .HasMaxLength(32)
+            .IsRequired();
+
+        builder.HasDiscriminator(security => security.Type)
+            .HasValue<Stock>(SecurityType.Stock)
+            .HasValue<ExchangeTradedFund>(SecurityType.ExchangeTradedFund)
+            .HasValue<Bond>(SecurityType.Bond)
+            .HasValue<Cash>(SecurityType.Cash);
+
+        builder.HasCheckConstraint("CK_Securities_CountryCode_Length", "char_length(\"CountryCode\") = 2");
+    }
+}
+
+public sealed class StockConfiguration : IEntityTypeConfiguration<Stock>
+{
+    public void Configure(EntityTypeBuilder<Stock> builder)
+    {
+        builder.Property(stock => stock.Sector)
+            .HasConversion<string>()
+            .HasMaxLength(64)
+            .IsRequired();
+
+        builder.Property(stock => stock.Industry)
+            .HasConversion(industry => industry.Value, value => new GicsIndustryCode(value))
+            .HasColumnName("GicsIndustryCode")
+            .HasMaxLength(8)
+            .IsFixedLength()
+            .IsRequired();
+
+        builder.HasCheckConstraint("CK_Securities_GicsIndustryCode_Length", "char_length(\"GicsIndustryCode\") = 8");
+    }
 }

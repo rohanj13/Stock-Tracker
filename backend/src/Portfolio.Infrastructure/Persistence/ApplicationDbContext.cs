@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Portfolio.Domain.Entities;
 
 namespace Portfolio.Infrastructure.Persistence;
 
@@ -13,11 +14,11 @@ public class ApplicationDbContext : DbContext
     {
     }
 
+    public DbSet<Stock> Stocks => Set<Stock>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
-        // Configuration for domain entities will be added here as the domain model evolves.
-        // Each entity should have its own EntityTypeConfiguration in the Configurations folder.
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
     }
 }
