@@ -5,8 +5,15 @@ namespace Portfolio.Domain.Entities;
 
 public sealed class Stock : Security
 {
-    public Stock(string symbol, string name, CountryCode country, GicsSector sector, GicsIndustryCode industry)
-        : base(symbol, name, country, SecurityType.Stock)
+    public Stock(
+        string symbol,
+        string name,
+        CountryCode country,
+        GicsSector sector,
+        GicsIndustryCode industry,
+        FigiIdentifiers figiIdentifiers,
+        string? sourceMicCode = null)
+        : base(symbol, name, country, SecurityType.Stock, figiIdentifiers, sourceMicCode)
     {
         Sector = sector;
         Industry = industry ?? throw new ArgumentNullException(nameof(industry));

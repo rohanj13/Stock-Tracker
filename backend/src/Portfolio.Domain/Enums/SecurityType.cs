@@ -15,17 +15,4 @@ public enum SecurityType
     Cash
 }
 
-public enum GicsSector
-{
-    Energy,
-    Materials,
-    Industrials,
-    ConsumerDiscretionary,
-    ConsumerStaples,
-    HealthCare,
-    Financials,
-    InformationTechnology,
-    CommunicationServices,
-    Utilities,
-    RealEstate
-}
+

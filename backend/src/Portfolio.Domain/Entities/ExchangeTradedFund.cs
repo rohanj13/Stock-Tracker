@@ -7,8 +7,13 @@ public sealed class ExchangeTradedFund : Security
 {
     private readonly List<EtfConstituent> _constituents = [];
 
-    public ExchangeTradedFund(string symbol, string name, CountryCode domicileCountry)
-        : base(symbol, name, domicileCountry, SecurityType.ExchangeTradedFund)
+    public ExchangeTradedFund(
+        string symbol,
+        string name,
+        CountryCode domicileCountry,
+        FigiIdentifiers figiIdentifiers,
+        string? sourceMicCode = null)
+        : base(symbol, name, domicileCountry, SecurityType.ExchangeTradedFund, figiIdentifiers, sourceMicCode)
     {
     }
 
@@ -22,5 +27,15 @@ public sealed class ExchangeTradedFund : Security
         _constituents.Add(constituent);
         Touch();
         return constituent;
+    }
+
+    public void RemoveConstituent(Guid constituentId)
+    {
+        var constituent = _constituents.FirstOrDefault(c => c.Id == constituentId);
+        if (constituent != null)
+        {
+            _constituents.Remove(constituent);
+            Touch();
+        }
     }
 }

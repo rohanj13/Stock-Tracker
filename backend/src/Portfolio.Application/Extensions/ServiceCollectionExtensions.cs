@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Portfolio.Application.Interfaces;
+using Portfolio.Application.Services;
 
 namespace Portfolio.Application.Extensions;
 
@@ -14,8 +16,16 @@ public static class ServiceCollectionExtensions
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        // Application services will be registered here as the domain model evolves.
-        // This includes business logic services, validators, DTOs, etc.
+        // Register instrument identifier resolver port (implementation provided by Infrastructure)
+        // services.AddScoped<IInstrumentIdentifierResolver, ...>(); // Registered in Infrastructure
+
+        // Register stock and ETF services with their repository ports
+        services.AddScoped<IStockService, StockService>();
+        services.AddScoped<IEtfService, EtfService>();
+
+        // Repository ports are registered in Infrastructure layer
+        // services.AddScoped<IStockRepository, ...>();
+        // services.AddScoped<IEtfRepository, ...>();
 
         return services;
     }

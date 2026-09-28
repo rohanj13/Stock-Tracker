@@ -198,6 +198,273 @@
 - Build and run instructions
 - Project structure overview
 - Feature roadmap
+
+## OpenFIGI Integration Implementation
+
+### Overview
+
+Full FIGI identifier support for stocks and ETFs, enabling canonical instrument identification via Bloomberg's OpenFIGI API. The system supports two creation modes:
+
+1. **Direct FIGI Lookup:** Supply a known venue FIGI
+2. **Resolution by Ticker:** Supply ticker + ISO MIC code for OpenFIGI resolution
+
+### Domain Layer (`Portfolio.Domain`)
+
+**New Value Object:**
+
+- `FigiIdentifiers.cs` - Immutable domain value object with three FIGI levels:
+  - `Figi` (venue-level, required) - Uniquely identifies a security on a specific exchange
+  - `CompositeFigi` (optional) - Groups all listings in the same country/market
+  - `ShareClassFigi` (optional) - Groups all global listings of the same instrument
+  - Built-in validation: length=12, prefix "BBG", alphanumeric suffix, uppercase normalization
+
+**Modified Entities:**
+
+- `Security.cs` - Abstract base class extended with:
+  - `FigiIdentifiers?` property (nullable for backward compatibility with bonds/cash)
+  - `SourceMicCode?` property (optional ISO MIC for audit trail)
+  - `UpdateName()` method to allow name changes post-creation
+- `Stock.cs` - FigiIdentifiers now required in constructor
+- `ExchangeTradedFund.cs` - FigiIdentifiers now required in constructor
+  - Added `RemoveConstituent()` method for constituent management
+
+**Test Coverage:**
+
+- Unit tests in `DomainTestPlaceholder.cs` (13 tests total)
+  - FIGI validation (length, format, case normalization)
+  - Stock/ETF construction with FIGI requirements
+  - Constituent operations for ETFs
+
+### Application Layer (`Portfolio.Application`)
+
+**New Interfaces:**
+
+- `IInstrumentIdentifierResolver.cs` - Port for instrument resolution
+  - `InstrumentLookupRequest` - Supports either/or validation (Figi XOR Ticker+MicCode)
+  - `InstrumentLookupResult` - Returns canonical ticker, name, and FigiIdentifiers
+  - `ResolveAsync()` method with full exception hierarchy
+
+- `IStockRepository.cs` & `IEtfRepository.cs` - Persistence ports
+  - Full CRUD operations with CancellationToken support
+  - `GetByVenueFigiAsync()` for unique FIGI lookups
+  - Constituent management for ETFs
+
+**New Exceptions:**
+
+- `InstrumentIdentifierException` - Base exception class
+- `InstrumentNotResolvedException` - No match found in OpenFIGI (422)
+- `AmbiguousInstrumentException` - Multiple matches found (422)
+- `DuplicateFigiException` - FIGI already exists in database (409)
+- `InstrumentIdentifierServiceException` - OpenFIGI service error (503/429/401)
+- `InvalidInstrumentLookupException` - Malformed request (400)
+
+**Updated DTOs:**
+
+- `CreateStockRequest` & `CreateEtfRequest`
+  - Optional `Figi` field for direct lookup
+  - Optional `Ticker` and `MicCode` fields for resolution lookup
+  - Either/or validation enforced
+- `StockDto` & `EtfDto` (responses)
+  - `Figi` - venue-level FIGI
+  - `CompositeFigi` & `ShareClassFigi` - optional FIGIs
+  - `SourceMicCode` - audit trail for resolution source
+
+**Service Implementations:**
+
+- `StockService.cs` - Orchestrates stock creation with OpenFIGI resolution
+  - Validates either/or lookup input
+  - Checks FIGI uniqueness (pre- and post-resolution)
+  - Constructs Stock entity with resolved FIGIs
+  - Delegates CRUD to IStockRepository
+
+- `EtfService.cs` - Orchestrates ETF creation with OpenFIGI resolution
+  - Same workflow as StockService
+  - Additional constituent management methods
+
+**Service Registration:**
+
+- `ServiceCollectionExtensions.cs` - Registers StockService and EtfService
+  - Repository and resolver ports registered in Infrastructure
+
+### Infrastructure Layer (`Portfolio.Infrastructure`)
+
+**New NuGet Dependency:**
+
+- Polly 8.4.1 - Resilience policies for HTTP client
+
+**OpenFIGI HTTP Client:**
+
+- `OpenFigiClient.cs` - Implements IInstrumentIdentifierResolver against OpenFIGI API
+  - POST /v3/mapping with request mapping
+  - Response parsing with FIGI extraction
+  - Exception classification (no match, ambiguous, service error)
+  - CancellationToken propagation
+
+**Resilience Policies:**
+
+- Retry policy: 3 attempts with exponential backoff (2s, 4s, 8s) for 429/503
+- Circuit breaker: Opens after 5 failures, duration 30s
+- Timeout policy: 30 seconds (configurable)
+- Combined via Polly.Wrap for layered resilience
+
+**Entity Framework Configuration:**
+
+- `SecurityConfiguration.cs` - TPH inheritance strategy
+  - Venue FIGI unique constraint
+  - Composite/share-class FIGI indexes for grouping queries
+  - FigiIdentifiers as owned entity with column mapping
+
+- `StockAndEtfConfiguration.cs` - Stock and ETF entity mappings
+  - GICS sector and industry codes
+  - Constituent foreign key relationships
+  - Unique (EtfId, SecurityId) constraint for constituents
+
+- Updated `ApplicationDbContext.cs`
+  - DbSets for Stock, ExchangeTradedFund, EtfConstituent
+  - Applied entity configurations via ModelBuilder
+
+**Repository Implementations:**
+
+- `StockRepository.cs` - EF Core implementation of IStockRepository
+  - FIGI-based lookups via EF queries
+  - DTO mapping with all FIGI fields
+  - Write operations accept domain entities
+
+- `EtfRepository.cs` - EF Core implementation of IEtfRepository
+  - Constituent tracking and management
+  - Cascade deletion for constituents
+  - Full CRUD with DTO mapping
+
+**Configuration:**
+
+- `appsettings.json` - OpenFIGI settings
+  ```json
+  "OpenFigi": {
+    "BaseUrl": "https://api.openfigi.com",
+    "Timeout": "00:00:30",
+    "ApiKey": null
+  }
+  ```
+- Environment variable `OpenFigi__ApiKey` for API key (optional locally, required in production)
+
+**Service Registration:**
+
+- Typed HttpClient with OpenFigiClient
+- Polly policies attached to HttpClient pipeline
+- Repositories registered as scoped services
+
+### API Layer (`Portfolio.Api`)
+
+**Enhanced Exception Handling:**
+
+- Updated `GlobalExceptionHandlingMiddleware.cs` with instrument-aware exception mapping
+  - 400 - Validation errors (ArgumentException, InvalidInstrumentLookupException)
+  - 409 - Conflict (DuplicateFigiException)
+  - 422 - Unprocessable Entity (InstrumentNotResolvedException, AmbiguousInstrumentException)
+  - 429 - Rate limit (InstrumentIdentifierServiceException w/ 429)
+  - 503 - Service unavailable (InstrumentIdentifierServiceException w/ 5xx)
+  - 500 - Unexpected errors
+- RFC 7807 Problem Details response format with:
+  - Type, Title, Status, Detail, Instance fields
+  - Non-sensitive messages to client, full details logged server-side
+
+**Configuration:**
+
+- Updated `appsettings.json` with OpenFigi section
+
+### Deployment & Usage
+
+**To Create a Stock with OpenFIGI Resolution:**
+
+```bash
+POST /api/stocks
+Content-Type: application/json
+
+{
+  "ticker": "AAPL",
+  "micCode": "XETR",
+  "name": "Fallback Name",
+  "country": "US",
+  "sector": "Technology",
+  "industryCode": "45202010"
+}
+
+# Response (on success):
+{
+  "id": "guid",
+  "symbol": "AAPL",
+  "name": "Apple Inc.",
+  "country": "US",
+  "sector": "Technology",
+  "industryCode": "45202010",
+  "figi": "BBG000B9XRY4",
+  "compositeFigi": "BBG001S6G9Y0",
+  "shareClassFigi": "BBG000B9Z3J9",
+  "sourceMicCode": "XETR",
+  "createdAt": "2024-...",
+  "updatedAt": "2024-..."
+}
+```
+
+**Or with Direct FIGI:**
+
+```bash
+POST /api/stocks
+{
+  "figi": "BBG000B9XRY4",
+  "name": "Apple Inc.",
+  "country": "US",
+  "sector": "Technology",
+  "industryCode": "45202010"
+}
+```
+
+**API Key Setup (Production):**
+
+Set environment variable before deploying:
+
+```bash
+export OpenFigi__ApiKey=your_openfigi_api_key
+```
+
+### Next Steps / Future Work
+
+1. **Database Migration:** Run `dotnet ef migrations add InitialSecurityWithFigi` to generate schema
+2. **Endpoint Wiring:** Connect Stock/ETF endpoints to use StockService/EtfService
+3. **Integration Tests:** Add application/infrastructure tests for OpenFIGI client (with mocked responses)
+4. **API Documentation:** Generate OpenAPI metadata with new response codes (409, 422, 503)
+5. **Frontend:** Implement UI for ticker/FIGI entry with real-time validation
+6. **Monitoring:** Add logging/metrics for OpenFIGI resolution success rates and latencies
+7. **Caching:** Consider Redis cache for OpenFIGI results (respects rate limits)
+
+### Architecture Diagram
+
+```
+API Layer (Portfolio.Api)
+  ↓
+  StockEndpoints / EtfEndpoints
+  ↓
+Application Layer (Portfolio.Application)
+  ↓
+  StockService / EtfService
+  ↓
+  (1) IInstrumentIdentifierResolver    (2) IStockRepository / IEtfRepository
+      ↓                                      ↓
+Infrastructure Layer (Portfolio.Infrastructure)
+  ↓
+  OpenFigiClient (HTTP POST)           StockRepository / EtfRepository (EF Core)
+  ↓                                    ↓
+  https://api.openfigi.com/v3/mapping  PostgreSQL (Npgsql)
+
+Domain Layer (Portfolio.Domain)
+  ↓
+  FigiIdentifiers (value object)
+  Stock / ExchangeTradedFund (entities)
+  Security (abstract base)
+```
+
+Clean Architecture with well-defined layering and ports/adapters pattern applied to external service integration (OpenFIGI).
+
 - Troubleshooting guide
 
 **README.md Files in Frontend**

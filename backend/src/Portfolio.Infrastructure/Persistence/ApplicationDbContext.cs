@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Portfolio.Domain.Entities;
+using Portfolio.Infrastructure.Persistence.Configurations;
 
 namespace Portfolio.Infrastructure.Persistence;
 
@@ -13,11 +15,18 @@ public class ApplicationDbContext : DbContext
     {
     }
 
+    public DbSet<Stock> Stocks { get; set; }
+    public DbSet<ExchangeTradedFund> ExchangeTradedFunds { get; set; }
+    public DbSet<EtfConstituent> EtfConstituents { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // Configuration for domain entities will be added here as the domain model evolves.
-        // Each entity should have its own EntityTypeConfiguration in the Configurations folder.
+        // Apply entity type configurations
+        modelBuilder.ApplyConfiguration(new SecurityConfiguration());
+        modelBuilder.ApplyConfiguration(new StockConfiguration());
+        modelBuilder.ApplyConfiguration(new ExchangeTradedFundConfiguration());
+        modelBuilder.ApplyConfiguration(new EtfConstituentConfiguration());
     }
 }
